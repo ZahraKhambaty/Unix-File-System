@@ -1,0 +1,14 @@
+clang -g -Wall -o sfs disk_emu.c sfs_api.c sfs_test1.c tests.c
+tests.c:189:28: warning: format specifies type 'int' but the argument has type 'unsigned long' [-Wformat]
+      printf("%d %d %d\n", strlen(buf), strlen(write_buf[i]), file_size[i]);
+              ~~           ^~~~~~~~~~~
+              %lu
+tests.c:189:41: warning: format specifies type 'int' but the argument has type 'unsigned long' [-Wformat]
+      printf("%d %d %d\n", strlen(buf), strlen(write_buf[i]), file_size[i]);
+                 ~~                     ^~~~~~~~~~~~~~~~~~~~
+                 %lu
+tests.c:426:97: warning: format specifies type 'int' but the argument has type 'unsigned long' [-Wformat]
+        fprintf(stderr, "Error: Read length error. Expected %d but received %d\n", read_length, strlen(read_buffer));
+                                                                            ~~                  ^~~~~~~~~~~~~~~~~~~
+                                                                            %lu
+3 warnings generated.
