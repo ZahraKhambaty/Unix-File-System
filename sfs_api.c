@@ -3,7 +3,7 @@
 #define NUM_BLOCKS   1024
 #define BLOCK_SIZE   1024
 #define NUM_OF_FILES 64     //per Data block
-#define MAX_FILESIZE 11
+#define MAX_FILESIZE 10
 #define FILE_NAME "Zahra"
 
 typedef struct _inode_t { //1 inode 64 bytes
@@ -51,6 +51,7 @@ rootDirTable_t rDT;
 inodeBlock_t iNodeBlock;
 DataBlock_t FBM; // Free Bit MAP
 DataBlock_t WM; // Write Mask
+DataBlock_t iNodeTracker[BLOCK_SIZE];
 
 void init_superBlock_t() {
     sb.magic = 0xABCD005;
@@ -131,52 +132,60 @@ void mkssfs(int fresh) {
 int ssfs_fopen(char *name) {
 
     int i;
+    int found = 0;
+    inode_t ninode; 
     // Lookup for file if it currently resides in our table
     for (i = 0; i < NUM_OF_FILES; i++) {
-        if (strcmp(rDT.fileEntries[i].filenames,"")==0) {
-              continue;
-             }
-            if (strncmp(name, rDT.fileEntries[i].filenames, NUM_OF_FILES) == 0) {
-                return i;
+        if (strncmp(name, rDT.fileEntries[i].filenames, NUM_OF_FILES) == 0) {
+            return i;
+        }            // if it doesnt then create a file
+        else {
+            for (i = 0; i < NUM_OF_FILES; i++) {
+                printf(" Not Found!! Creating");
+                if (strncmp(rDT.fileEntries[i], '\0') == 0) {               // search for an available entry in the root directory table
+                    rootDir_t *new = malloc(sizeof (rootDir_t));            // create a new entry space
+                    rDT.fileEntries[i]= new;                                // allocate this space to the new entry
+                    strncpy(new->filenames, name);                          // name the file 
+                    //need to find and allocate an inode for this new file.
+                    for(int j = 0;j<)
+                    read_blocks(&FBM,1, void *buffer)
+                            
+                    filesDescriptors_t *newFileEntry = malloc(sizeof (filesDescriptors_t));
+                    newFileEntry->inodeIndex = i;
+                    newFileEntry->readPointer = i;
+                    newFileEntry->writePointer = i % NUM_BLOCKS;
+                    new = newFileEntry;
+
+                }
+
             }
         }
-        printf("Err!! Not Found!! Creating");
-        // if it doesnt then create a file
-        for (i = 0; i < NUM_OF_FILES; i++) {
-            if (strcmp(rDT.fileEntries[i].filenames,"")==0) {
-                rootDir_t *desc = malloc(sizeof (rootDir_t));
-                strncpy(desc->filenames, name, MAX_FILESIZE);
-                desc->inodeIndex = i;
-                desc->readPointer = i;
-                desc->writePointer = i % NUM_BLOCKS;
-                rDT.fileEntries[i] = desc;
-                return i;
-            }
-        }
 
 
+        return i;
     }
+}
 
-    int ssfs_fclose(int fileID) {
-        return 0;
-    }
+int ssfs_fclose(int fileID) {
+    return 0;
+}
 
-    int ssfs_frseek(int fileID, int loc) {
-        return 0;
-    }
+int ssfs_frseek(int fileID, int loc) {
+    return 0;
+}
 
-    int ssfs_fwseek(int fileID, int loc) {
-        return 0;
-    }
+int ssfs_fwseek(int fileID, int loc) {
+    return 0;
+}
 
-    int ssfs_fwrite(int fileID, char *buf, int length) {
-        return 0;
-    }
+int ssfs_fwrite(int fileID, char *buf, int length) {
+    return 0;
+}
 
-    int ssfs_fread(int fileID, char *buf, int length) {
-        return 0;
-    }
+int ssfs_fread(int fileID, char *buf, int length) {
+    return 0;
+}
 
-    int ssfs_remove(char *file) {
-        return 0;
-    }
+int ssfs_remove(char *file) {
+    return 0;
+}
