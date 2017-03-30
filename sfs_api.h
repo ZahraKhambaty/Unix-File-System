@@ -1,3 +1,6 @@
+#include "disk_emu.h"
+#include <stdio.h>
+#include <string.h>
 //Functions you should implement. 
 //Return -1 for error besides mkssfs
 void mkssfs(int fresh);
