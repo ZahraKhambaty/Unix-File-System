@@ -27,11 +27,12 @@ typedef struct _rootDirEntry_t { //root directory with 16 inodes/block
     char filenames[10];
 } rootDir_t;
 
-typedef struct _rootDirTable_t {                    // block of file entries,each file takes 16 bytes, hence 1024/16=64
+typedef struct _rootDirTable_t { // block of file entries,each file takes 16 bytes, hence 1024/16=64
     rootDir_t fileEntries[NUM_OF_FILES];
 } rootDirTable_t;
 
 typedef struct _fileDescriptorEntry_t { //organizes the files
+    int fdindex;
     int inodeIndex;
     inode_t inode;
     int readPointer;
@@ -82,6 +83,7 @@ void init_rootDirTable_t() {
 
 void init_fileDescriptorTable_t() {
     for (int i = 0; i < NUM_OF_FILES; i++) {
+        fDT.table[i].fdindex = -1;
         fDT.table[i].inode.size = -1;
         fDT.table[i].inodeIndex = -1;
         fDT.table[i].readPointer = -1;
@@ -123,7 +125,7 @@ void mkssfs(int fresh) {
     init_FirstInodeBlock_t();
     init_freeBitMap_t();
     init_iNode_tracker_t();
-    
+
     printf("initialized\n");
     FBM.blocks[0] = 0; // superblock
     FBM.blocks[1] = 0; // FBM
@@ -152,7 +154,7 @@ void mkssfs(int fresh) {
             write_blocks(3, 1, &iNodeBlock);
             write_blocks(4, 1, &rDT);
             printf("end\n");
-            
+
 
         }
     }
@@ -160,7 +162,7 @@ void mkssfs(int fresh) {
 }
 
 int ssfs_fopen(char *name) {
-    
+
     int i;
     int fdindex;
     int nodeIndex;
@@ -169,35 +171,34 @@ int ssfs_fopen(char *name) {
     inode_t ninode;
     inodeBlock_t *nblock;
     fileDescriptorEntry_t newFileEntry;
-   
+
     // Lookup for file if it currently resides in our table
     for (i = 0; i < NUM_OF_FILES; i++) {
         printf("Looking for the file\n");
         if (strcmp(name, rDT.fileEntries[i].filenames) == 0) {
-            tempinodenum = rDT.fileEntries[i].inodeNum;                         // find the corresponding inode number
-            blocknum= sb.root.direct[tempinodenum/ NUM_INODES_PER_BLOCK];      // find the block number that corresponds to the inode
-            read_blocks(blocknum, 1, &ninode);                                   // read the block get the inode details                                                                    // want to use the current ninode.
-            newFileEntry.inodeIndex= tempinodenum;
-            newFileEntry.inode= ninode;
-            newFileEntry.readPointer= 0;
-            newFileEntry.writePointer= ninode.size;
+            tempinodenum = rDT.fileEntries[i].inodeNum; // find the corresponding inode number
+            blocknum = sb.root.direct[tempinodenum / NUM_INODES_PER_BLOCK]; // find the block number that corresponds to the inode
+            read_blocks(blocknum, 1, &ninode); // read the block get the inode details                                                                    // want to use the current ninode.
+            newFileEntry.inodeIndex = tempinodenum;
+            newFileEntry.inode = ninode;
+            newFileEntry.readPointer = 0;
+            newFileEntry.writePointer = ninode.size;
             for (int j = 0; j < MAX_FILEDESCRIPTABLE_SIZE; j++) {
-                if (fDT.table[j].inodeIndex==-1) {
+                if (fDT.table[j].inodeIndex == -1) {
                     fDT.table[j] = newFileEntry;
-                    fdindex=j;
-                    return fdindex;
+                    fDT.table[j].fdindex = j;
+                    return j;
                 }
             }
-            
-        }
-            // if it doesnt then create a file
+
+        }// if it doesnt then create a file
         else {
             for (i = 0; i < NUM_OF_FILES; i++) {
                 printf("Not Found!! Creating\n");
-                if (strcmp(rDT.fileEntries[i].filenames,"\0") == 0) {                       // search for an available entry in the root directory table
-                    rootDir_t new;                                                  // create a new entry space
-                    rDT.fileEntries[i] = new;                                      // allocate this space to the new entry
-                    strcpy(new.filenames, name);                                  // name the file
+                if (strcmp(rDT.fileEntries[i].filenames, "\0") == 0) { // search for an available entry in the root directory table
+                    rootDir_t new; // create a new entry space
+                    rDT.fileEntries[i] = new; // allocate this space to the new entry
+                    strcpy(new.filenames, name); // name the file
                     //need to allocate a data block for the inode;
                     //need to find an inode for this new file.
                     printf("here1\n");
@@ -209,57 +210,73 @@ int ssfs_fopen(char *name) {
                         }
                     }
                     printf("here2\n");
-                    new.inodeNum = nodeIndex;                                          // assign  the inode to the new entry
-                    blocknum = sb.root.direct[nodeIndex/ NUM_INODES_PER_BLOCK]; 
-                    nblock = malloc(sizeof (inodeBlock_t));                            // read the block we are gonna allocate to
+                    new.inodeNum = nodeIndex; // assign  the inode to the new entry
+                    blocknum = sb.root.direct[nodeIndex / NUM_INODES_PER_BLOCK];
+                    nblock = malloc(sizeof (inodeBlock_t)); // read the block we are gonna allocate to
                     read_blocks(blocknum, 1, nblock);
                     inode_t *currInode = &(nblock->inodes[nodeIndex % 16]);
-                    currInode->size=0;
+                    currInode->size = 0;
                     printf("here3\n");
-                    write_blocks(blocknum, 1, nblock);                                // creates a file descriptor for the new entry and updates the content.
-                    printf("Block Num%i\n",blocknum);
+                    write_blocks(blocknum, 1, nblock); // creates a file descriptor for the new entry and updates the content.
+                    printf("Block Num%i\n", blocknum);
                     newFileEntry.inode = *currInode;
                     newFileEntry.inodeIndex = nodeIndex;
                     newFileEntry.readPointer = 0;
                     newFileEntry.writePointer = 0;
-                     printf("Nodeindex %i\n",nodeIndex);
+                    printf("Nodeindex %i\n", nodeIndex);
                     for (int j = 0; j < MAX_FILEDESCRIPTABLE_SIZE; j++) {
-                        if (fDT.table[j].inodeIndex==-1) {
-                        fDT.table[j] = newFileEntry;
-                        fdindex=j;
-                        printf("FDindex %i\n",fdindex);
-                        printf("Done\n");
-                        return fdindex;
-                       
+                        if (fDT.table[j].inodeIndex == -1) {
+                            fDT.table[j].fdindex = j;
+                            fDT.table[j] = newFileEntry;
+                            fdindex = j;
+                            printf("FDindex %i\n", fdindex);
+                            printf("Done\n");
+                            return fdindex;
+
+                        }
+
                     }
 
                 }
+            }
+
+
+            return 0;
+        }
+    }
+}
+
+int ssfs_fclose(int fileID) {
+
+    if (fileID < 0) {
+        printf("INDEX NOT DEFINED");
+        return-1;
+    }
+    if (fileID > 64) {
+        printf("Too Many files, cannot handle");
+        return -1;
+    } else {
+
+        printf("Finding\n");
+        int j;
+        for (j = 0; j < MAX_FILEDESCRIPTABLE_SIZE; j++) {
+            if (fDT.table[j].fdindex == fileID) {
+                printf("Closing\n");
+                fDT.table[j].fdindex = -1;
+                fDT.table[j].inode.size = -1;
+                fDT.table[j].readPointer = -1;
+                fDT.table[j].writePointer = -1;
+                fDT.table[j].inodeIndex = -1;
+                printf("fDT.index %i", fDT.table[j].fdindex);
+                return 0;
 
             }
         }
 
 
-        return i;
     }
-}
-}
-int ssfs_fclose(int fileID) {
-    
-    if(fileID<0){
-        printf("INDEX NOT DEFINED");
-        return-1;
-    }
-    if(fileID>64){
-        printf("Too Many files, cannot handle");
-        return -1;
-    }
-    else{
-    
-    
-    
-    }
-    
-   
+
+
     return 0;
 }
 
@@ -283,12 +300,12 @@ int ssfs_remove(char *file) {
     return 0;
 }
 
-
-int main(){
+int main() {
     mkssfs(1);
     ssfs_fopen("zahra");
     ssfs_fopen("fatuu");
     ssfs_fopen("hassu");
     ssfs_fopen("zahra");
+    ssfs_fclose(2);
     return 0;
 }

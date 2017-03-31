@@ -34,7 +34,7 @@
 #define ABS_CAP_FILE_SIZE 2000000
 
 static char test_str[] = "Graphic Card is life. I need a 1080 for Christmas. As a side note, it's quite obvious when people copy from github. Usually there's more than one guy copying for the same repository.\n";
- 
+
 //Random Text Generators
 char *rand_name();
 
@@ -45,7 +45,7 @@ int test_seek(int *file_id, int *file_size, int *write_ptr, char **write_buf, in
 int test_read_all_files(int *file_id, int *file_size, char **write_buf, int num_file, int *err_no);
 int test_simple_read_files(int *file_id, int *file_size, char **write_buf, int num_file, int *err_no);
 int test_difficult_read_files(int *file_id, int *file_size, int *write_ptr, char **write_buf, int index, int read_length, int *err_no);
-int test_random_read_files(int *file_id, int *file_size, int *write_ptr, char **write_buf ,int num_file, int *err_no);
+int test_random_read_files(int *file_id, int *file_size, int *write_ptr, char **write_buf, int num_file, int *err_no);
 
 //Write Function
 int test_simple_write_files(int *file_id, int *file_size, int *write_ptr, char **write_buf, int num_file, int *err_no);
