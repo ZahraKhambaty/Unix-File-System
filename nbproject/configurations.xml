@@ -36,7 +36,7 @@
       <makefileType>
         <makeTool>
           <buildCommandWorkingDir>.</buildCommandWorkingDir>
-          <buildCommand>make test3</buildCommand>
+          <buildCommand>make test1</buildCommand>
           <cleanCommand>make clean</cleanCommand>
           <executablePath>sfs</executablePath>
         </makeTool>
