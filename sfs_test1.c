@@ -57,7 +57,7 @@ int simple_test(){
   free(write_ptr);
   for(int i = 0; i < num_file; i++){
     free(file_names[i]);
-  }
+                                                              }
   free(file_id);
   free(file_names);
   return 0;

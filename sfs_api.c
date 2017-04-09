@@ -27,7 +27,7 @@ typedef struct _superBlock_t {
 
 typedef struct _rootDirEntry_t { //root directory with 16 inodes/block                                
     int inodeNum;
-    char filenames[10];
+    char filename[10];
 } rootDir_t;
 
 typedef struct _rootDirTable_t { // block of file entries,each file takes 16 bytes, hence 1024/16=64
@@ -63,8 +63,9 @@ fileDescriptorTable_t fDT; //file descriptor table
 inodeBlock_t iNodeBlock;
 DataBlock_t FBM; // Free Bit MAP
 DataBlock_t WM; // Write Mask
-inode_t ninode;
+inode_t currInode;
 inode_t iNodeTracker[200];
+char *bufferin;
 
 void init_superBlock_t() {
     sb.magic = 0xABCD005;
@@ -82,7 +83,7 @@ void init_rootDirTable_t() {
     for (int i = 0; i < NUM_OF_FILES; i++) {
         rDT.fileEntries[i].inodeNum = -1; // means inode is not used.
         for (int k = 0; k < 10; k++) {
-            rDT.fileEntries[i].filenames[k] = '\0';
+            rDT.fileEntries[i].filename[k] = '\0';
         }
     }
 }
@@ -112,12 +113,12 @@ void init_FirstInodeBlock_t() {
 
 void init_Inodes_t() {
 
-    ninode.size = -1; // means inode is not used.
+    currInode.size = -1; // means inode is not used.
     for (int j = 0; j < 14; j++) {
-        ninode.direct[j] = -1;
+        currInode.direct[j] = -1;
     }
 
-    ninode.indirect = -1;
+    currInode.indirect = -1;
 }
 
 void init_freeBitMap_t() {
@@ -148,11 +149,14 @@ void mkssfs(int fresh) {
     FBM.blocks[0] = 0; // superblock
     FBM.blocks[1] = 0; // FBM
     FBM.blocks[2] = 0; // WM
-    FBM.blocks[3] = 0; // first inode block
-    FBM.blocks[4] = 0; // first root directory block
+    // inode blocks
+    for (int k=3; k < 16; k++) {
+        FBM.blocks[k] = 0; 
+    }
+    FBM.blocks[17] = 0; // first root directory block
 
     sb.root.direct[0] = 3; // points to 1st inode block 
-    iNodeBlock.inodes[0].direct[0] = 4;
+    iNodeBlock.inodes[0].direct[0] = 17;
 
     //OPEN A NEW DISK
     if (!fresh) {
@@ -169,8 +173,8 @@ void mkssfs(int fresh) {
             write_blocks(0, 1, &sb);
             write_blocks(1, 1, &FBM);
             write_blocks(2, 1, &WM);
-            write_blocks(3, 13, &iNodeBlock);
-            write_blocks(14, 4, &rDT);
+            write_blocks(3, 16, &iNodeBlock);
+            write_blocks(17, 4, &rDT);
             printf("end\n");
 
 
@@ -182,59 +186,56 @@ void mkssfs(int fresh) {
 int ssfs_fopen(char *name) {
 
     int i;
-    int nodeIndex;
+    int nodeIndex=0;
     int tempinodenum;
     int blocknum;
-    // inode_t ninode;
     inodeBlock_t* iNodeBlock;
     fileDescriptorEntry_t newFileEntry;
     int found = 0;
-
-
     // Lookup for file if it currently resides in our table
     // printf("Looking for the file\n");
     for (i = 0; i < 200; i++) {
-        //    printf("Comparing to %s\n", rDT.fileEntries[i].filenames);
-        if (strcmp(name, rDT.fileEntries[i].filenames) == 0) {
+      //printf("Comparing to %s\n", rDT.fileEntries[i].filename);
+        if (strcmp(name, rDT.fileEntries[i].filename) == 0) {
             found = 1;
             // find the corresponding inode number
             tempinodenum = rDT.fileEntries[i].inodeNum;
-            printf("tempinodenum%i\n", tempinodenum);
+            //  printf("tempinodenum%i\n", tempinodenum);
             blocknum = sb.root.direct[tempinodenum / NUM_INODES_PER_BLOCK]; // find the block number that corresponds to the inode
-            printf("In if\n");
+            //    printf("In if\n");
             iNodeBlock = malloc(sizeof (inodeBlock_t));
             read_blocks(blocknum, 1, iNodeBlock);
+            inode_t *currInode = &(iNodeBlock->inodes[nodeIndex % 16]);
             // read the block get the inode details
-            // want to use the current ninode.
-            //      printf("In if\n");
+            // want to use the current currInode.
             newFileEntry.inodeIndex = tempinodenum;
-            newFileEntry.inode = ninode;
-            //      printf("In if\n");
+            newFileEntry.inode = *currInode;
             newFileEntry.readPointer = 0;
-            newFileEntry.writePointer = ninode.size;
-            //     printf("In if\n");
+            newFileEntry.writePointer = currInode->size;
+            write_blocks(blocknum, 1, iNodeBlock);
             for (int j = 0; j < MAX_FILEDESCRIPTABLE_SIZE; j++) {
                 //        printf("In for\n");
-                if (fDT.table[j].fdindex == -1) {
+                if (fDT.table[j].inodeIndex != newFileEntry.inodeIndex) {
                     //           printf("in if in for\n");
                     fDT.table[j] = newFileEntry;
                     fDT.table[j].fdindex = j;
                     //         printf("changed index = %d\n", fDT.table[j].fdindex);
                     return fDT.table[j].fdindex;
                 }
+                break;
             }
-        }
+        }break;
     }
     // if it doesnt then create a file c
     if (!found) {
         //  printf("Not Found!! Creating\n");
         for (i = 0; i < NUM_OF_FILES; i++) {
             // search for an available entry in the root directory table
-            if (strcmp(rDT.fileEntries[i].filenames, "\0") == 0) {
+            if (strcmp(rDT.fileEntries[i].filename, "\0") == 0) {
                 // create a new entry space
                 rootDir_t *new = &rDT.fileEntries[i];
                 // allocate this space to the new entry
-                strcpy(new->filenames, name); // name the file
+                strcpy(new->filename, name); // name the file
                 //need to allocate a data block for the inode;
                 //need to find an inode for this new file.
                 //         printf("here1\n");
@@ -255,30 +256,33 @@ int ssfs_fopen(char *name) {
                 read_blocks(blocknum, 1, iNodeBlock);
                 inode_t *currInode = &(iNodeBlock->inodes[nodeIndex % 16]);
                 currInode->size = 0;
-                //         printf("here3\n");
-                write_blocks(blocknum, 1, iNodeBlock); // creates a file descriptor for the new entry and updates the content.
-                //        printf("Block Num%i\n", blocknum);
-                FBM.blocks[blocknum] = 0; // updating the fbm to indicate the data block is used
+                currInode->direct[0]= nodeIndex;
+                write_blocks(blocknum, 1, iNodeBlock);
+                // printf("here3\n");
+                // creates a file descriptor for the new entry and updates the content.
+                // printf("Block Num%i\n", blocknum);
+                // updating the fbm to indicate the data block is used
                 newFileEntry.inode = *currInode;
                 newFileEntry.inodeIndex = nodeIndex;
                 newFileEntry.readPointer = 0;
                 newFileEntry.writePointer = 0;
-                write_blocks(4, 1, &rDT);
-                //       printf("Nodeindex %i\n", nodeIndex);
+                
                 for (int j = 0; j < MAX_FILEDESCRIPTABLE_SIZE; j++) {
                     if (fDT.table[j].fdindex == -1) {
 
                         newFileEntry.fdindex = j;
                         fDT.table[j] = newFileEntry;
-
+                                                           
                         //             printf("FDindex %i\n", fDT.table[j].fdindex);
                         //             printf("Done\n");
                         return fDT.table[j].fdindex;
 
                     }
                 }
+                
 
             }
+            break;
         }
     }
     return 0;
@@ -355,8 +359,9 @@ int ssfs_fwrite(int fileID, char *buf, int length) {
     inodeBlock_t *iNodeBlock;
     int blocknum;
     int byteswritten;
-    int bitsoverwritten;
-    char *bufferin;
+    bufferin = malloc(1024 * sizeof (char));
+    cache = malloc(sizeof (DataBlock_t));
+
 
     if (fileID < 0) {
         printf("INDEX NOT DEFINED");
@@ -365,58 +370,94 @@ int ssfs_fwrite(int fileID, char *buf, int length) {
     if (fileID > 200) {
         printf("Too Many files, cannot handle");
         return -1;
-    } else {
-
-        if (fDT.table[fileID].inode.size == 0) {
-            printf("Writing to a newly created file");
-            iNodeBlock = malloc(sizeof (inodeBlock_t));
-            blocknum = sb.root.direct[fDT.table[fileID].inodeIndex / NUM_INODES_PER_BLOCK];
-            read_blocks(blocknum, 1, iNodeBlock);
-            inode_t *currInode = &(iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16]);
-            if (length > 1023) {
-                for (int j = 0; j < length / 1024; j++) {
-                    write_blocks(currInode->direct[j], 1, buf);
-                    buf += 1024;
-                }
-            } else {
-                write_blocks(currInode->direct[0], 1, buf);
-            }
-            fDT.table[fileID].writePointer = length;
-
-        } else {
-            printf("Writing to an existing file\n");
-            iNodeBlock = malloc(sizeof (inodeBlock_t));
-            blocknum = sb.root.direct[fDT.table[fileID].inodeIndex / NUM_INODES_PER_BLOCK];
-            read_blocks(blocknum, 1, iNodeBlock);
-            inode_t *currInode = &(iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16]);
-            cache = malloc(sizeof (DataBlock_t));
-            bufferin = malloc(1024 * sizeof (char));
-            int num_direct = (fDT.table[fileID].writePointer) / 1024;
-            //TODO need loop for other cases
-            //there is space in the current data block
-            if (length <= (1024 - (fDT.table[fileID].writePointer))) {
-                //read the data block from disk
-                read_blocks(currInode->direct[num_direct], 1, cache);
-                //memcopy the buffer starting write pointer
-                memcpy(cache + fDT.table[fileID].writePointer, buf, length);
-                //push back to disk
-                write_blocks(currInode->direct[num_direct], 1, cache);
-                //record the number of bytes written
-                bitsoverwritten += length;
-                //move the write pointer and increment inode size
-                fDT.table[fileID].inode.size += length;
-                fDT.table[fileID].writePointer += length;
-
-                //adjust 
-                iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16].size += length;
-                write_blocks(blocknum, 1, iNodeBlock);
-                return length;
-            } else { // we need another data block
-                //TODO implement case 2 & 3
-                return 0;
-            }
-        }
     }
+    if (fDT.table[fileID].inode.size == -1) {
+        printf("Writing to a newly created file\n");
+        iNodeBlock = malloc(sizeof (inodeBlock_t));
+        blocknum = sb.root.direct[fDT.table[fileID].inodeIndex / NUM_INODES_PER_BLOCK];
+        read_blocks(blocknum, 1, iNodeBlock);
+        inode_t *currInode = &(iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16]);
+        // What we want to write is greater than a block
+        if (length > 1024) {
+            for (int j = 0; j < length / 1024; j++) {
+                write_blocks(currInode->direct[j], 1, buf);
+                buf += 1024;
+            }
+            iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16].size += length;
+            fDT.table[fileID].writePointer = length;
+        }//what we want to write fits in 1 data Block
+        else {
+                                                                     
+            write_blocks(currInode->direct[0], 1, buf);
+            iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16].size += length;
+            write_blocks(blocknum, 1, iNodeBlock);
+            fDT.table[fileID].writePointer = length;
+        }
+
+
+    }
+    printf("Writing to an existing file\n");
+    // 2 cases 
+    // Writing to a block where there is space  
+    iNodeBlock = malloc(sizeof (inodeBlock_t));
+    blocknum = sb.root.direct[fDT.table[fileID].inodeIndex / NUM_INODES_PER_BLOCK];
+    read_blocks(blocknum, 1, iNodeBlock);
+    inode_t *currInode = &(iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16]);
+
+    // find the inodeData Block corresponding to the write pointer
+    int num_inodeDataBlock = (fDT.table[fileID].writePointer) / 1024;
+    // We will face two cases here as well: 
+    //1) if length + writponter is < 1024
+    if (length + fDT.table[fileID].writePointer <= 1024) {
+        // read the data block from the disk                                                                      
+        read_blocks(currInode->direct[num_inodeDataBlock], 1, bufferin);
+        //memcopy the buffer starting write pointer
+        memcpy(bufferin + fDT.table[fileID].writePointer, buf, length);
+        //push back to disk
+        write_blocks(currInode->direct[num_inodeDataBlock], 1, bufferin);
+        // num of bytes written
+        byteswritten = length;
+        //increment the write pointer and increment inode size in FDT
+        fDT.table[fileID].inode.size += (length + 1);
+        fDT.table[fileID].writePointer += (length + 1);
+        //increment the write pointer and increment inode size in the disk
+        iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16].size += (length + 1);
+        write_blocks(blocknum, 1, iNodeBlock);
+        return length;
+    }
+    //2) if length + writepointer is >= 1024
+    if (length + fDT.table[fileID].writePointer >= 1024) {
+        // we will have to write to multiple data blocks
+        // lets first find the number of data blocks we will have to write to
+        int num_dataBlocks = (length + fDT.table[fileID].writePointer) / 1024;
+        for (int j = num_inodeDataBlock; j < num_dataBlocks; j++) {
+            //read the data block from the disk                                                                      
+            read_blocks(currInode->direct[j], 1, cache);
+            //memcopy the contents of the data block corresponding to the writepointer into the bufferin
+            memcpy(bufferin, cache, fDT.table[fileID].writePointer);
+            //update bufferin pointer
+            bufferin = bufferin + fDT.table[fileID].writePointer;
+            // note that we need to  calculate the remaining bytes or available bytes in the block
+            //memcopy the new content into the bufferin starting at the updated index
+            int available_byte_space = 1024 - fDT.table[fileID].writePointer;
+            memcpy(bufferin, buf, available_byte_space);
+            // update buf // this corresponds to the remaining data that neets to be written
+            buf = buf + available_byte_space;
+            //push back to disk
+            write_blocks(currInode->direct[j], 1, bufferin);
+            // clear bufferin for each block
+            memset(bufferin, '\0', 1024);
+
+        }
+        //increment the write pointer and increment inode size in FDT
+        fDT.table[fileID].inode.size += (length + 1);
+        fDT.table[fileID].writePointer += (length + 1);
+        //increment the write pointer and increment inode size in the disk
+        iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16].size += (length + 1);
+        write_blocks(blocknum, 1, iNodeBlock);
+
+    }
+
     return 0;
 }
 
@@ -446,14 +487,18 @@ int ssfs_fread(int fileID, char *buf, int length) {
         blocknum = sb.root.direct[fDT.table[fileID].inodeIndex / NUM_INODES_PER_BLOCK];
         read_blocks(blocknum, 1, iNodeBlock);
         inode_t *currInode = &(iNodeBlock->inodes[fDT.table[fileID].inodeIndex % 16]);
-        int num_direct= length + fDT.table[fileID].readPointer;
+        // find the data block corresponding to the read pointer
+        int num_inodeDataBlock = (fDT.table[fileID].readPointer) / 1024;
+        // lets first find the number of data blocks we will have to read
+        int num_dataBlocks = (length + fDT.table[fileID].writePointer) / 1024;
         if (length > 1024) {
-            for (int j = fDT.table[fileID].readPointer/1024 ; j < num_direct ; j++) {
+            for (int j = num_inodeDataBlock; j < num_dataBlocks; j++) {
                 read_blocks(currInode->direct[j], 1, buf);
                 buf += 1024;
             }
         } else {
-            read_blocks(currInode->direct[0], 1, buf);
+            // read from the disk
+            read_blocks(currInode->direct[num_inodeDataBlock], 1, buf);
         }
         fDT.table[fileID].readPointer = length;
         return length;
@@ -470,7 +515,7 @@ int ssfs_remove(char *file) {
     // access the root directory
     printf("Starting\n");
     for (int j = 0; j < NUM_OF_FILES; j++) {
-        if (strcmp(rDT.fileEntries[j].filenames, file) == 0) {
+        if (strcmp(rDT.fileEntries[j].filename, file) == 0) {
             printf("enterig loop\n");
             getInodenum = rDT.fileEntries[j].inodeNum; // get inodenum corresponding to the file
             // Clear the tracker
@@ -482,7 +527,7 @@ int ssfs_remove(char *file) {
             }
             // release entry from RDT
             for (int k = 0; k < 10; k++) {
-                rDT.fileEntries[j].filenames[k] = '\0';
+                rDT.fileEntries[j].filename[k] = '\0';
 
             }
             rDT.fileEntries[j].inodeNum = -1;
@@ -492,7 +537,7 @@ int ssfs_remove(char *file) {
             inodeIndex = getInodenum % NUM_INODES_PER_BLOCK;
             read_blocks(blocknum, 1, iNodeBlock);
             inode_t *currInode = &(iNodeBlock->inodes[inodeIndex]); // get the inode
-            // want to release the current ninode.
+            // want to release the current currInode.
             currInode->size = -1;
             for (int k = 0; k < 14; k++) {
                 if (currInode->direct[k] != -1) {
