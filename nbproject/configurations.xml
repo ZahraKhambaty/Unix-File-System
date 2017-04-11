@@ -5,6 +5,7 @@
       <in>disk_emu.c</in>
       <in>sfs_api.c</in>
       <in>sfs_test1.c</in>
+      <in>sfs_test2.c</in>
       <in>test3.c</in>
       <in>tests.c</in>
     </df>
@@ -36,7 +37,8 @@
       <makefileType>
         <makeTool>
           <buildCommandWorkingDir>.</buildCommandWorkingDir>
-          <buildCommand>make test1</buildCommand>
+          <buildCommand>make test1
+</buildCommand>
           <cleanCommand>make clean</cleanCommand>
           <executablePath>sfs</executablePath>
         </makeTool>
@@ -53,11 +55,15 @@
         <cTool flags="0">
         </cTool>
       </item>
-      <item path="sfs_test1.c" ex="false" tool="0" flavor2="0">
+      <item path="sfs_test1.c" ex="false" tool="0" flavor2="2">
         <cTool flags="0">
         </cTool>
       </item>
-      <item path="test3.c" ex="false" tool="0" flavor2="0">
+      <item path="sfs_test2.c" ex="false" tool="0" flavor2="0">
+        <cTool flags="0">
+        </cTool>
+      </item>
+      <item path="test3.c" ex="false" tool="0" flavor2="2">
       </item>
       <item path="tests.c" ex="false" tool="0" flavor2="0">
         <cTool flags="0">
